@@ -1,0 +1,47 @@
+- name: Launch EC2 Instances
+  hosts: localhost
+  gather_facts: no
+  vars:
+    ansible_python_interpreter: /opt/miniconda3/bin/python3
+
+  tasks:
+    - name: Launch instances
+      amazon.aws.ec2_instance:
+        count: "{{ instance_count }}"
+        instance_type: "{{ instance_type }}"
+        key_name: JKey
+        region: "{{ region }}"
+        image_id: "ami-02d26659fd82cf299"
+        tags:
+          Name: "ansible-cicd"
+      register: ec2_instances
+
+    - name: Wait for SSH to be available
+      ansible.builtin.wait_for:
+        host: "{{ item.public_ip_address }}"
+        port: 22
+        delay: 10
+        timeout: 300
+      loop: "{{ ec2_instances.instances }}"
+
+    - name: Refresh inventory so new hosts are visible
+      meta: refresh_inventory
+
+
+- name: Configure New Instances
+  hosts: tag__ansible_cicd
+  remote_user: ubuntu
+  become: yes
+  vars:
+    ansible_ssh_private_key_file: /Users/hemant7122/MasterAnsible/JKey.pem
+  tasks:
+    - name: Install Apache
+      apt:
+        name: apache2
+        state: present
+        update_cache: yes
+
+    - name: Start Apache
+      service:
+        name: apache2
+        state: started
